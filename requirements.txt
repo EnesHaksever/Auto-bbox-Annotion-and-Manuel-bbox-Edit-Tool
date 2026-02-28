@@ -1,0 +1,36 @@
+# Core requirements for Python 3.12 (version numbers intentionally omitted)
+# The installer (pip) will select compatible releases automatically.
+# For GPU operation ensure your system has a CUDA‑capable NVIDIA card
+# and the matching driver/runtime; follow PyTorch’s install guide.
+
+PyQt6
+ultralytics
+
+# image processing
+pillow
+opencv-python
+opencv-contrib-python
+numpy
+
+# utilities
+requests
+pyyaml
+tqdm
+matplotlib
+scipy
+
+# extras
+beautifulsoup4
+certifi
+charset-normalizer
+
+# NOTE: torch/torchvision are **not** listed above because their
+# installation differs for CPU vs GPU.  After creating the venv use one
+# of the commands below depending on your setup:
+#
+#   CPU-only (fallback)    : pip install torch torchvision --extra-index-url https://download.pytorch.org/whl/cpu
+#   GPU (CUDA 12.1)        : pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+#
+# Adjust the index-url to cu118 or other if you need a different CUDA
+# toolkit version.  The installer will pick a release that matches your
+# Python / platform automatically.
