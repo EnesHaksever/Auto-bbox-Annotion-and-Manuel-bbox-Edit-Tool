@@ -76,6 +76,18 @@ class EditMode(QtWidgets.QWidget):
         self.index_label = QtWidgets.QLabel("0 / 0")
         left_layout.addWidget(self.index_label)
 
+        # direct-jump control: enter index and go
+        jump_row = QtWidgets.QHBoxLayout()
+        jump_row.addWidget(QtWidgets.QLabel("Git: "))
+        self.goto_spin = QtWidgets.QSpinBox()
+        self.goto_spin.setRange(1, 1)
+        self.goto_spin.setEnabled(False)
+        jump_row.addWidget(self.goto_spin)
+        self.goto_button = QtWidgets.QPushButton("Git")
+        self.goto_button.setEnabled(False)
+        jump_row.addWidget(self.goto_button)
+        left_layout.addLayout(jump_row)
+
         left_layout.addSpacing(10)
         self.save_button = QtWidgets.QPushButton("💾 Kaydet")
         left_layout.addWidget(self.save_button)
@@ -95,6 +107,11 @@ class EditMode(QtWidgets.QWidget):
 
         left_layout.addStretch()
 
+        # delete current image + label
+        left_layout.addSpacing(6)
+        self.delete_button = QtWidgets.QPushButton("Fotoğrafı Sil")
+        left_layout.addWidget(self.delete_button)
+
         content.addWidget(left_panel, 0)
 
         # RIGHT PANEL: only canvas
@@ -106,6 +123,9 @@ class EditMode(QtWidgets.QWidget):
         # connections
         self.prev_button.clicked.connect(self.prev_image)
         self.next_button.clicked.connect(self.next_image)
+        self.goto_button.clicked.connect(self.go_to_image)
+        # connect delete
+        self.delete_button.clicked.connect(self.delete_current_image)
         self.save_button.clicked.connect(self.save_current_annotation)
         self.canvas.boxes_changed.connect(self._on_boxes_changed)
         self.box_list.itemClicked.connect(self._box_list_selected)
@@ -239,6 +259,15 @@ class EditMode(QtWidgets.QWidget):
             folder.glob("*.jpeg")
         )
         self.current_index = 0 if self.images else -1
+        # enable/adjust goto controls
+        if self.images:
+            self.goto_spin.setEnabled(True)
+            self.goto_spin.setRange(1, len(self.images))
+            self.goto_button.setEnabled(True)
+        else:
+            self.goto_spin.setEnabled(False)
+            self.goto_spin.setRange(1, 1)
+            self.goto_button.setEnabled(False)
         self._load_current()
 
     def _load_current(self) -> None:
@@ -260,8 +289,90 @@ class EditMode(QtWidgets.QWidget):
         self.canvas.boxes_changed.emit()
         self.canvas.update()
         self.index_label.setText(f"{self.current_index+1} / {len(self.images)}")
+        # update goto control
+        try:
+            self.goto_spin.setRange(1, len(self.images))
+            self.goto_spin.setValue(self.current_index + 1)
+            self.goto_spin.setEnabled(True)
+            self.goto_button.setEnabled(True)
+        except Exception:
+            pass
         # automatically switch to navigate mode when a new image is shown
         self._set_mode(CanvasMode.NAVIGATE)
+
+    def go_to_image(self) -> None:
+        """Jump directly to the image number entered in the spinbox (1-based)."""
+        if self.current_index < 0:
+            return
+        idx = self.goto_spin.value() - 1
+        if 0 <= idx < len(self.images):
+            self._save_current_in_memory()
+            self.current_index = idx
+            self._load_current()
+
+    def delete_current_image(self) -> None:
+        """Delete the current image file and its label after confirmation."""
+        if self.current_index < 0 or self.current_index >= len(self.images):
+            return
+        img_path = self.images[self.current_index]
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Silme Onayı",
+            f"'{img_path.name}' dosyasını ve etiketi silmek istediğinize emin misiniz?",
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+        )
+        if reply != QtWidgets.QMessageBox.StandardButton.Yes:
+            return
+
+        # attempt to remove image file
+        try:
+            if img_path.exists():
+                img_path.unlink()
+        except Exception:
+            self._show_temporary_message("Fotoğraf silinemedi")
+
+        # remove corresponding label
+        label_dir_text = self._label_dir_edit.text().strip()
+        if label_dir_text:
+            label_path = Path(label_dir_text) / img_path.with_suffix(".txt").name
+        else:
+            label_path = img_path.with_suffix(".txt")
+        try:
+            if label_path.exists():
+                label_path.unlink()
+        except Exception:
+            pass
+
+        # remove from saved list if present
+        for i in range(self.saved_list.count()):
+            if self.saved_list.item(i).text() == img_path.name:
+                self.saved_list.takeItem(i)
+                break
+        self.saved_count_label.setText(f"Toplam: {self.saved_list.count()}")
+
+        # remove from internal state
+        self.annotations.pop(img_path, None)
+        self.dirty.pop(img_path, None)
+        del self.images[self.current_index]
+
+        # update navigation
+        if not self.images:
+            self.current_index = -1
+            self.canvas._pixmap = None
+            self.canvas._boxes = []
+            self.canvas._selected_box = None
+            self.canvas.update()
+            self.index_label.setText("0 / 0")
+            self.goto_spin.setEnabled(False)
+            self.goto_spin.setRange(1, 1)
+            self.goto_button.setEnabled(False)
+            self._show_temporary_message("Fotoğraf silindi")
+            return
+
+        if self.current_index >= len(self.images):
+            self.current_index = len(self.images) - 1
+        self._load_current()
+        self._show_temporary_message("Fotoğraf silindi")
 
     def _load_annotation_for(self, img_path: Path) -> None:
         # determine label path (use separate label folder if provided)
