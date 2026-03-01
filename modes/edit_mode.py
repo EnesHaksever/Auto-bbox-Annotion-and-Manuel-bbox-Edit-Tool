@@ -23,20 +23,31 @@ class EditMode(QtWidgets.QWidget):
 
         # top row: file/label selectors
         top_bar = QtWidgets.QHBoxLayout()
+        # image folder selector with reset button
         self._image_dir_edit = QtWidgets.QLineEdit()
+        self.img_reset_btn = QtWidgets.QPushButton("Sıfırla")
+        self.img_reset_btn.setFixedWidth(60)
+        self.img_reset_btn.clicked.connect(self.reset_state)
         btn1 = QtWidgets.QPushButton("Gözat...")
+        top_bar.addWidget(self.img_reset_btn)
         top_bar.addWidget(QtWidgets.QLabel("Fotolar:"))
         top_bar.addWidget(self._image_dir_edit)
         top_bar.addWidget(btn1)
         btn1.clicked.connect(self._choose_images)
 
         self._label_dir_edit = QtWidgets.QLineEdit()
+        self.lbl_reset_btn = QtWidgets.QPushButton("Sıfırla")
+        self.lbl_reset_btn.setFixedWidth(60)
+        self.lbl_reset_btn.clicked.connect(self.reset_state)
         btn2 = QtWidgets.QPushButton("Gözat...")
+        top_bar.addWidget(self.lbl_reset_btn)
         top_bar.addWidget(QtWidgets.QLabel("Etiketler:"))
         top_bar.addWidget(self._label_dir_edit)
         top_bar.addWidget(btn2)
         btn2.clicked.connect(self._choose_labels)
 
+        # global state file stored in workspace root for persisting last session
+        self._global_state_file = Path(__file__).resolve().parents[1] / "last_session.txt"
         self._layout.addLayout(top_bar)
 
         # main content area
@@ -126,7 +137,8 @@ class EditMode(QtWidgets.QWidget):
         self.goto_button.clicked.connect(self.go_to_image)
         # connect delete
         self.delete_button.clicked.connect(self.delete_current_image)
-        self.save_button.clicked.connect(self.save_current_annotation)
+        # save button should also move to next image
+        self.save_button.clicked.connect(lambda: self.save_current_annotation(True))
         self.canvas.boxes_changed.connect(self._on_boxes_changed)
         self.box_list.itemClicked.connect(self._box_list_selected)
         self.class_spin.valueChanged.connect(lambda v: setattr(self.canvas, 'new_box_class', v))
@@ -144,12 +156,83 @@ class EditMode(QtWidgets.QWidget):
         self.images: List[Path] = []
         self.current_index: int = -1
         # keep list of boxes updated
+        # after constructing UI, try loading previous session
+        self._load_global_state()
 
     def _show_temporary_message(self, text: str, timeout: int = 1500) -> None:
         """Display a transient tooltip-style message at bottom-right of widget."""
         # map bottom-right corner of this widget to global coords
         pos = self.mapToGlobal(self.rect().bottomRight())
         QtWidgets.QToolTip.showText(pos, text, self, self.rect(), timeout)
+
+    def _load_global_state(self) -> None:
+        """Load image/label paths and last index from global state file."""
+        if not self._global_state_file.exists():
+            return
+        try:
+            import json
+            with open(self._global_state_file, 'r', encoding='utf-8') as fh:
+                st = json.load(fh)
+            img = st.get('image_dir', '')
+            lbl = st.get('label_dir', '')
+            idx = st.get('current_index', 0)
+            if img and Path(img).is_dir():
+                # set text before loading so dialogs reflect state
+                self._image_dir_edit.setText(img)
+                self.load_images(Path(img))
+                if lbl and Path(lbl).is_dir():
+                    self._label_dir_edit.setText(lbl)
+                # override index if valid
+                if 0 <= idx < len(self.images):
+                    self.current_index = idx
+                # show current image if any
+                if self.images and self.current_index >= 0:
+                    self._load_current()
+        except Exception:
+            # ignore parse errors
+            pass
+
+    def _save_global_state(self) -> None:
+        """Persist current image/label paths and index to global state file."""
+        try:
+            import json
+            data = {
+                'image_dir': self._image_dir_edit.text(),
+                'label_dir': self._label_dir_edit.text(),
+                'current_index': self.current_index,
+            }
+            with open(self._global_state_file, 'w', encoding='utf-8') as fh:
+                json.dump(data, fh)
+        except Exception:
+            pass
+
+    def reset_state(self) -> None:
+        """Clear saved session state and reset UI."""
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Sıfırla",
+            "Kayıtlı klasör yolları ve sıra silinecek. Emin misiniz?",
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+        )
+        if reply != QtWidgets.QMessageBox.StandardButton.Yes:
+            return
+        try:
+            if self._global_state_file.exists():
+                self._global_state_file.unlink()
+        except Exception:
+            pass
+        self._image_dir_edit.clear()
+        self._label_dir_edit.clear()
+        self.images = []
+        self.current_index = -1
+        self.canvas._pixmap = None
+        self.canvas._boxes = []
+        self.canvas._selected_box = None
+        self.canvas.update()
+        self.index_label.setText("0 / 0")
+        self.goto_spin.setEnabled(False)
+        self.goto_spin.setRange(1, 1)
+        self.goto_button.setEnabled(False)
 
         
     def _refresh_box_list(self) -> None:
@@ -222,6 +305,7 @@ class EditMode(QtWidgets.QWidget):
     def next_image(self) -> None:
         if self.current_index < 0:
             return
+        # save current in-memory edits and move forward
         self._save_current_in_memory()
         if self.current_index + 1 < len(self.images):
             self.current_index += 1
@@ -236,6 +320,7 @@ class EditMode(QtWidgets.QWidget):
             self.saved_list.clear()
             self.saved_count_label.setText("Toplam: 0")
             self.load_images(Path(path))
+            self._save_global_state()
 
     def _choose_labels(self) -> None:
         path = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Label Folder")
@@ -243,10 +328,12 @@ class EditMode(QtWidgets.QWidget):
             self._label_dir_edit.setText(path)
             # we currently assume labels are stored alongside images
             # future implementation may sync or copy files
+            self._save_global_state()
 
     def prev_image(self) -> None:
         if self.current_index < 0:
             return
+        # save current in-memory edits and move back
         self._save_current_in_memory()
         if self.current_index - 1 >= 0:
             self.current_index -= 1
@@ -268,6 +355,8 @@ class EditMode(QtWidgets.QWidget):
             self.goto_spin.setEnabled(False)
             self.goto_spin.setRange(1, 1)
             self.goto_button.setEnabled(False)
+        # after loading images we may update global state (paths, index)
+        self._save_global_state()
         self._load_current()
 
     def _load_current(self) -> None:
@@ -297,6 +386,8 @@ class EditMode(QtWidgets.QWidget):
             self.goto_button.setEnabled(True)
         except Exception:
             pass
+        # update global file with current index
+        self._save_global_state()
         # automatically switch to navigate mode when a new image is shown
         self._set_mode(CanvasMode.NAVIGATE)
 
@@ -304,9 +395,10 @@ class EditMode(QtWidgets.QWidget):
         """Jump directly to the image number entered in the spinbox (1-based)."""
         if self.current_index < 0:
             return
+        # save current in-memory edits and jump
+        self._save_current_in_memory()
         idx = self.goto_spin.value() - 1
         if 0 <= idx < len(self.images):
-            self._save_current_in_memory()
             self.current_index = idx
             self._load_current()
 
@@ -400,7 +492,10 @@ class EditMode(QtWidgets.QWidget):
             self.canvas._boxes = self.annotation.boxes.copy()
             self.canvas.update()
 
-    def save_current_annotation(self) -> None:
+    # NOTE: confirmation-on-navigation removed per user request; navigation
+    # now simply saves current state in memory and proceeds.
+
+    def save_current_annotation(self, advance: bool = False) -> None:
         if self.current_index < 0 or self.current_index >= len(self.images):
             return
         img_path = self.images[self.current_index]
@@ -428,3 +523,8 @@ class EditMode(QtWidgets.QWidget):
         self._add_saved_image(img_path.name)
         # mark this image clean
         self.dirty[self.images[self.current_index]] = False
+        if advance:
+            # move to next image after saving (mimic previous "next" behavior)
+            if self.current_index + 1 < len(self.images):
+                self.current_index += 1
+                self._load_current()

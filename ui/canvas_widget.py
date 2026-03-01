@@ -79,16 +79,16 @@ class CanvasWidget(QtWidgets.QWidget):
             rect = QtCore.QRectF(box.x1, box.y1, box.width(), box.height())
             # a couple pixels thicker makes boxes easier to see
             if box is self._selected_box:
-                pen = QtGui.QPen(QtGui.QColor("red"), 3 / self._scale)
+                pen = QtGui.QPen(QtGui.QColor("magenta"), 3 / self._scale)
             else:
-                pen = QtGui.QPen(QtGui.QColor("green"), 2 / self._scale)
+                pen = QtGui.QPen(QtGui.QColor("red"), 2 / self._scale)
             painter.setPen(pen)
             painter.drawRect(rect)
             
             # draw resize handles if selected
             if box is self._selected_box and self._mode == CanvasMode.SELECT:
                 handle_size_transformed = self._handle_size / self._scale
-                handle_brush = QtGui.QBrush(QtGui.QColor("red"))
+                handle_brush = QtGui.QBrush(QtGui.QColor("magenta"))
                 # corners
                 painter.fillRect(QtCore.QRectF(box.x1 - handle_size_transformed/2, box.y1 - handle_size_transformed/2, handle_size_transformed, handle_size_transformed), handle_brush)
                 painter.fillRect(QtCore.QRectF(box.x2 - handle_size_transformed/2, box.y1 - handle_size_transformed/2, handle_size_transformed, handle_size_transformed), handle_brush)
@@ -190,8 +190,15 @@ class CanvasWidget(QtWidgets.QWidget):
                 self._dragging = False
                 if self._current_rect is not None:
                     rect = self._current_rect.normalized()
-                    self._boxes.append(BoundingBox(0, rect.left(), rect.top(), rect.right(), rect.bottom()))
+                    new_box = BoundingBox(0, rect.left(), rect.top(), rect.right(), rect.bottom())
+                    self._boxes.append(new_box)
+                    # select the newly created box
+                    self._selected_box = new_box
                     self._current_rect = None
+                    # emit signal to indicate boxes changed and switch to select mode
+                    self.boxes_changed.emit()
+                    # after drawing a box, switch to select mode so user can edit it
+                    self.set_mode(CanvasMode.SELECT)
                     self.update()
             elif self._mode == CanvasMode.SELECT:
                 self._dragging = False
