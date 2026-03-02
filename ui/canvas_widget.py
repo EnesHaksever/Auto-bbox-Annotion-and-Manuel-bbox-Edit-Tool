@@ -20,6 +20,7 @@ class CanvasMode(Enum):
 
 class CanvasWidget(QtWidgets.QWidget):
     boxes_changed = QtCore.pyqtSignal()
+    mode_changed = QtCore.pyqtSignal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -50,8 +51,11 @@ class CanvasWidget(QtWidgets.QWidget):
 
     def set_mode(self, mode: CanvasMode) -> None:
         """Switch interaction mode."""
+        if self._mode == mode:
+            return
         self._mode = mode
         self.setCursor(QtCore.Qt.CursorShape.ArrowCursor)
+        self.mode_changed.emit(mode)
 
     def load_image(self, path: Path) -> None:
         self._pixmap = QtGui.QPixmap(str(path))
@@ -190,7 +194,13 @@ class CanvasWidget(QtWidgets.QWidget):
                 self._dragging = False
                 if self._current_rect is not None:
                     rect = self._current_rect.normalized()
-                    new_box = BoundingBox(0, rect.left(), rect.top(), rect.right(), rect.bottom())
+                    new_box = BoundingBox(
+                        self.new_box_class,
+                        rect.left(),
+                        rect.top(),
+                        rect.right(),
+                        rect.bottom(),
+                    )
                     self._boxes.append(new_box)
                     # select the newly created box
                     self._selected_box = new_box

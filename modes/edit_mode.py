@@ -160,6 +160,7 @@ class EditMode(QtWidgets.QWidget):
         # save button should also move to next image
         self.save_button.clicked.connect(lambda: self.save_current_annotation(True))
         self.canvas.boxes_changed.connect(self._on_boxes_changed)
+        self.canvas.mode_changed.connect(self._on_canvas_mode_changed)
         self.box_list.itemClicked.connect(self._box_list_selected)
         self.class_spin.valueChanged.connect(lambda v: setattr(self.canvas, 'new_box_class', v))
         self.class_spin.valueChanged.connect(self._change_selected_class)
@@ -399,6 +400,12 @@ class EditMode(QtWidgets.QWidget):
     def _set_mode(self, mode: CanvasMode) -> None:
         """Switch canvas mode and update button states."""
         self.canvas.set_mode(mode)
+        self.navigate_btn.setChecked(mode == CanvasMode.NAVIGATE)
+        self.mark_btn.setChecked(mode == CanvasMode.MARK)
+        self.select_btn.setChecked(mode == CanvasMode.SELECT)
+
+    def _on_canvas_mode_changed(self, mode: CanvasMode) -> None:
+        """Keep mode buttons synced when canvas changes mode internally."""
         self.navigate_btn.setChecked(mode == CanvasMode.NAVIGATE)
         self.mark_btn.setChecked(mode == CanvasMode.MARK)
         self.select_btn.setChecked(mode == CanvasMode.SELECT)
