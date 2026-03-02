@@ -225,12 +225,19 @@ class CanvasWidget(QtWidgets.QWidget):
 
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
         """Handle Delete key to remove selected box."""
-        if event.key() == QtCore.Qt.Key.Key_Delete and self._selected_box:
-            if self._selected_box in self._boxes:
-                self._boxes.remove(self._selected_box)
-            self._selected_box = None
-            self.boxes_changed.emit()
-            self.update()
+        if event.key() in (QtCore.Qt.Key.Key_Delete, QtCore.Qt.Key.Key_Backspace):
+            self.delete_selected_box()
+
+    def delete_selected_box(self) -> bool:
+        """Delete current selection and return whether a box was removed."""
+        if not self._selected_box:
+            return False
+        if self._selected_box in self._boxes:
+            self._boxes.remove(self._selected_box)
+        self._selected_box = None
+        self.boxes_changed.emit()
+        self.update()
+        return True
 
     def _get_handle_at(self, pos: QtCore.QPointF, box: BoundingBox) -> Optional[str]:
         """Check if pos is near a resize handle. Returns handle name or None."""

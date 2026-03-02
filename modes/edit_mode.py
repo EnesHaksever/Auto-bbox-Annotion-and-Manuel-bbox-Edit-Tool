@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional
+from typing import Callable, List, Optional
 
-from PyQt6 import QtWidgets
+from PyQt6 import QtCore, QtGui, QtWidgets
 
 from ui.canvas_widget import CanvasWidget, CanvasMode
 from ui.control_panel import ControlPanel
@@ -17,9 +17,29 @@ from core.yolo_label_parser import read_yolo_labels, write_yolo_labels
 class EditMode(QtWidgets.QWidget):
     """Container for image navigation and bounding box editing."""
 
+    _SHORTCUT_LABELS = {
+        "prev": "Önceki",
+        "next": "Sonraki",
+        "save": "Kaydet",
+        "navigate": "Gezinme",
+        "mark": "Bbox Çizme",
+        "select": "Seçme",
+        "delete_image": "Resim Sil",
+    }
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._layout = QtWidgets.QVBoxLayout(self)
+        self._shortcut_defaults = {
+            "prev": "Left",
+            "next": "Right",
+            "save": "Return",
+            "navigate": "Q",
+            "mark": "W",
+            "select": "E",
+            "delete_image": "Delete",
+        }
+        self._shortcuts: dict[str, QtGui.QShortcut] = {}
 
         # top row: file/label selectors
         top_bar = QtWidgets.QHBoxLayout()
@@ -156,8 +176,89 @@ class EditMode(QtWidgets.QWidget):
         self.images: List[Path] = []
         self.current_index: int = -1
         # keep list of boxes updated
+        self._setup_shortcuts()
         # after constructing UI, try loading previous session
         self._load_global_state()
+
+    def shortcut_action_keys(self) -> list[str]:
+        return list(self._shortcut_defaults.keys())
+
+    def get_shortcut_label(self, action_key: str) -> str:
+        return self._SHORTCUT_LABELS.get(action_key, action_key)
+
+    def get_default_shortcut_sequence(self, action_key: str) -> QtGui.QKeySequence:
+        return QtGui.QKeySequence(self._shortcut_defaults[action_key])
+
+    def get_shortcut_sequence(self, action_key: str) -> QtGui.QKeySequence:
+        shortcut = self._shortcuts.get(action_key)
+        if shortcut is None:
+            return self.get_default_shortcut_sequence(action_key)
+        return shortcut.key()
+
+    def set_shortcut_sequence(self, action_key: str, sequence: QtGui.QKeySequence) -> None:
+        self._update_shortcut_key(action_key, sequence)
+
+    def _setup_shortcuts(self) -> None:
+        actions: dict[str, Callable[[], None]] = {
+            "prev": self._shortcut_prev_image,
+            "next": self._shortcut_next_image,
+            "save": self._shortcut_save,
+            "navigate": lambda: self._shortcut_set_mode(CanvasMode.NAVIGATE),
+            "mark": lambda: self._shortcut_set_mode(CanvasMode.MARK),
+            "select": lambda: self._shortcut_set_mode(CanvasMode.SELECT),
+            "delete_image": self._shortcut_delete,
+        }
+        for key, handler in actions.items():
+            shortcut = QtGui.QShortcut(QtGui.QKeySequence(self._shortcut_defaults[key]), self)
+            shortcut.setContext(QtCore.Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(handler)
+            self._shortcuts[key] = shortcut
+
+    def _update_shortcut_key(self, action_key: str, sequence: QtGui.QKeySequence) -> None:
+        shortcut = self._shortcuts.get(action_key)
+        if shortcut is not None:
+            shortcut.setKey(sequence)
+
+    def _is_focus_on_input(self) -> bool:
+        fw = QtWidgets.QApplication.focusWidget()
+        if fw is None:
+            return False
+        return isinstance(
+            fw,
+            (
+                QtWidgets.QLineEdit,
+                QtWidgets.QTextEdit,
+                QtWidgets.QPlainTextEdit,
+                QtWidgets.QAbstractSpinBox,
+            ),
+        )
+
+    def _shortcut_prev_image(self) -> None:
+        if self._is_focus_on_input():
+            return
+        self.prev_image()
+
+    def _shortcut_next_image(self) -> None:
+        if self._is_focus_on_input():
+            return
+        self.next_image()
+
+    def _shortcut_save(self) -> None:
+        if self._is_focus_on_input():
+            return
+        self.save_current_annotation(True)
+
+    def _shortcut_set_mode(self, mode: CanvasMode) -> None:
+        if self._is_focus_on_input():
+            return
+        self._set_mode(mode)
+
+    def _shortcut_delete(self) -> None:
+        if self._is_focus_on_input():
+            return
+        if self.canvas.delete_selected_box():
+            return
+        self.delete_current_image()
 
     def _show_temporary_message(self, text: str, timeout: int = 1500) -> None:
         """Display a transient tooltip-style message at bottom-right of widget."""
