@@ -22,9 +22,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.edit_action.setCheckable(True)
         self.shortcut_action = QtGui.QAction("Edit Shortcuts", self)
         self.shortcut_action.setCheckable(True)
+        self.copy_range_action = QtGui.QAction("Copy Range", self)
+        self.copy_range_action.setCheckable(True)
         toolbar.addAction(self.auto_action)
         toolbar.addAction(self.edit_action)
         toolbar.addAction(self.shortcut_action)
+        toolbar.addAction(self.copy_range_action)
 
         # placeholders for modes
         # to be set by controller logic
@@ -40,3 +43,4 @@ class MainWindow(QtWidgets.QMainWindow):
         self.auto_action.setChecked(class_name == "AutoLabelMode")
         self.edit_action.setChecked(class_name == "EditMode")
         self.shortcut_action.setChecked(class_name == "EditShortcutsMode")
+        self.copy_range_action.setChecked(class_name == "CopyRangeMode")

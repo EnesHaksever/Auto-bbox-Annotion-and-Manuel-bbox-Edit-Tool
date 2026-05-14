@@ -76,7 +76,7 @@ class DetectionEngine:
         if self.model is None:
             raise RuntimeError("Model not loaded")
 
-        results = self.model(str(image_path), conf=self.confidence)
+        results = self.model(str(image_path), conf=self.confidence, imgsz=1280)
         for r in results:
             for box in r.boxes:
                 class_id = int(box.cls.item())

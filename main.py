@@ -8,6 +8,7 @@ from PyQt6 import QtWidgets
 
 from ui.main_window import MainWindow
 from modes.auto_label_mode import AutoLabelMode
+from modes.copy_range_mode import CopyRangeMode
 from modes.edit_mode import EditMode
 from modes.edit_shortcuts_mode import EditShortcutsMode
 
@@ -20,11 +21,13 @@ def main() -> None:
     auto_widget = AutoLabelMode()
     edit_widget = EditMode()
     shortcuts_widget = EditShortcutsMode(edit_widget)
+    copy_range_widget = CopyRangeMode()
 
     # wire toolbar actions
     window.auto_action.triggered.connect(lambda: window.set_mode_widget(auto_widget))
     window.edit_action.triggered.connect(lambda: window.set_mode_widget(edit_widget))
     window.shortcut_action.triggered.connect(lambda: window.set_mode_widget(shortcuts_widget))
+    window.copy_range_action.triggered.connect(lambda: window.set_mode_widget(copy_range_widget))
 
     # default to auto
     window.set_mode_widget(auto_widget)
