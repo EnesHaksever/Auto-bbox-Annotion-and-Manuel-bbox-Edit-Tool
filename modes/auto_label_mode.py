@@ -174,14 +174,6 @@ class AutoLabelMode(QtWidgets.QWidget):
             self._thread = None
         self._worker = None
 
-    def _on_error(self, msg: str) -> None:
-        QtWidgets.QMessageBox.critical(self, "Error", msg)
-        self._set_controls_enabled(True)
-        if self._thread:
-            self._thread.quit()
-            self._thread.wait()
-            self._thread = None
-
     def _on_thread_finished(self) -> None:
         print("[AutoLabelMode] thread finished cleanup")
         # called when QThread emits finished; ensure references are cleared
