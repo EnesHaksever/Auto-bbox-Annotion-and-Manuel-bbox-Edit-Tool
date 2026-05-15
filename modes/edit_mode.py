@@ -172,10 +172,6 @@ class EditMode(QtWidgets.QWidget):
         self.images: List[Path] = []
         self.current_index: int = -1
 
-        # annotation state
-        self.annotation = Annotation()
-        self.images: List[Path] = []
-        self.current_index: int = -1
         # keep list of boxes updated
         self._setup_shortcuts()
         # after constructing UI, try loading previous session

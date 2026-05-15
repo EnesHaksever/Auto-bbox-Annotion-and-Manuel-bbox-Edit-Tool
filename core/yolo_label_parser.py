@@ -18,8 +18,10 @@ def read_yolo_labels(label_path: Path) -> List[Tuple[int, float, float, float, f
             parts = line.strip().split()
             if not parts:
                 continue
+            if len(parts) < 5:
+                continue
             class_id = int(parts[0])
-            coords = tuple(float(x) for x in parts[1:])
+            coords = tuple(float(x) for x in parts[1:5])
             entries.append((class_id, *coords))
     return entries
 

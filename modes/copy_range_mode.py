@@ -11,7 +11,7 @@ from PyQt6 import QtCore, QtWidgets
 
 class CopyRangeMode(QtWidgets.QWidget):
     progress_updated = QtCore.pyqtSignal(int)
-    finished = QtCore.pyqtSignal(str, str)
+    finished = QtCore.pyqtSignal(str, str, str)  # images_path, labels_path, failed_summary
     error = QtCore.pyqtSignal(str)
 
     def __init__(self, parent=None):
@@ -186,15 +186,16 @@ class CopyRangeMode(QtWidgets.QWidget):
         self._thread.finished.connect(self._on_thread_finished)
         self._thread.start()
 
-    def _on_finished(self, images_path: str, labels_path: str) -> None:
+    def _on_finished(self, images_path: str, labels_path: str, failed_summary: str) -> None:
         self._set_controls_enabled(True)
         self._thread and self._thread.quit()
         self._thread and self._thread.wait()
         self._thread = None
         self._worker = None
-        self._result_label.setText(
-            f"Copied images to: {images_path}\nCopied labels to: {labels_path}"
-        )
+        result = f"Copied images to: {images_path}\nCopied labels to: {labels_path}"
+        if failed_summary:
+            result += f"\n\nFailed to copy ({failed_summary.count(chr(10)) + 1} file(s)):\n{failed_summary}"
+        self._result_label.setText(result)
 
     def _on_error(self, msg: str) -> None:
         QtWidgets.QMessageBox.critical(self, "Error", msg)
@@ -213,7 +214,7 @@ class CopyRangeMode(QtWidgets.QWidget):
 
 class _CopyRangeWorker(QtCore.QObject):
     progress_updated = QtCore.pyqtSignal(int)
-    finished = QtCore.pyqtSignal(str, str)
+    finished = QtCore.pyqtSignal(str, str, str)  # images_path, labels_path, failed_summary
     error = QtCore.pyqtSignal(str)
 
     def __init__(
@@ -239,6 +240,15 @@ class _CopyRangeWorker(QtCore.QObject):
             images.extend(self.images_dir.glob(ext))
         return sorted(images, key=lambda p: p.name.lower())
 
+    @staticmethod
+    def _safe_path(p: Path) -> str:
+        """Return a Windows extended-length path string to bypass MAX_PATH."""
+        import os
+        resolved = str(p.resolve())
+        if os.name == "nt" and not resolved.startswith("\\\\?\\"):
+            resolved = "\\\\?\\" + resolved
+        return resolved
+
     def run(self) -> None:
         try:
             images = self._collect_sorted_images()
@@ -258,19 +268,27 @@ class _CopyRangeWorker(QtCore.QObject):
                 self.error.emit("No images found in the specified range.")
                 return
 
+            failed: List[str] = []
             for i, image_path in enumerate(selection, start=1):
-                target_image_path = self.output_images_dir / image_path.name
-                shutil.copy2(image_path, target_image_path)
+                try:
+                    target_image_path = self.output_images_dir / image_path.name
+                    shutil.copy2(self._safe_path(image_path), self._safe_path(target_image_path))
 
-                label_path = self.labels_dir / image_path.with_suffix(".txt").name
-                if label_path.exists():
-                    target_label_path = self.output_labels_dir / label_path.name
-                    shutil.copy2(label_path, target_label_path)
+                    label_path = self.labels_dir / image_path.with_suffix(".txt").name
+                    if label_path.exists():
+                        target_label_path = self.output_labels_dir / label_path.name
+                        shutil.copy2(self._safe_path(label_path), self._safe_path(target_label_path))
+                except Exception as file_exc:
+                    failed.append(f"{image_path.name}: {file_exc}")
 
                 progress = int((i / selected_count) * 100)
                 self.progress_updated.emit(progress)
 
             self.progress_updated.emit(100)
-            self.finished.emit(str(self.output_images_dir), str(self.output_labels_dir))
+            self.finished.emit(
+                str(self.output_images_dir),
+                str(self.output_labels_dir),
+                "\n".join(failed),
+            )
         except Exception as exc:
             self.error.emit(f"Copy range failed: {exc}")
