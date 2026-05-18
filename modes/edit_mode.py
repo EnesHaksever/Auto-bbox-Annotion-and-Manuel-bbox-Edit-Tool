@@ -120,7 +120,7 @@ class EditMode(QtWidgets.QWidget):
         left_layout.addLayout(jump_row)
 
         left_layout.addSpacing(10)
-        self.save_button = QtWidgets.QPushButton("💾 Kaydet")
+        self.save_button = QtWidgets.QPushButton("Kaydet")
         left_layout.addWidget(self.save_button)
 
         left_layout.addSpacing(10)
