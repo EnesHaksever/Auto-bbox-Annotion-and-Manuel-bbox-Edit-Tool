@@ -132,7 +132,7 @@ class CanvasWidget(QtWidgets.QWidget):
         # draw rectangle being created (in MARK mode)
         if self._current_rect and self._mode == CanvasMode.MARK:
             painter.setPen(QtGui.QPen(QtGui.QColor("blue"), 1 / self._scale, QtCore.Qt.PenStyle.DashLine))
-            painter.drawRect(self._current_rect)
+            painter.drawRect(self._current_rect.normalized())
         
         painter.restore()
 
@@ -189,7 +189,7 @@ class CanvasWidget(QtWidgets.QWidget):
             self._set_crosshair_cursor()
             if self._dragging and self._current_rect is not None:
                 pos = self._to_image_coords(event.position())
-                self._current_rect.setBottomRight(pos)
+                self._current_rect = QtCore.QRectF(self._drag_start, pos).normalized()
                 self.update()
         
         elif self._mode == CanvasMode.SELECT:
