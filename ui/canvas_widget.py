@@ -54,13 +54,43 @@ class CanvasWidget(QtWidgets.QWidget):
         if self._mode == mode:
             return
         self._mode = mode
-        self.setCursor(QtCore.Qt.CursorShape.ArrowCursor)
+        if mode == CanvasMode.MARK:
+            self._set_crosshair_cursor()
+        else:
+            self.setCursor(QtCore.Qt.CursorShape.ArrowCursor)
         self.mode_changed.emit(mode)
 
     def load_image(self, path: Path) -> None:
         self._pixmap = QtGui.QPixmap(str(path))
-        self._scale = 1.0
-        self._offset = QtCore.QPointF(0, 0)
+        self.fit_image_to_view()
+        QtCore.QTimer.singleShot(0, self.fit_image_to_view)
+        self.update()
+
+    def fit_image_to_view(self) -> None:
+        """Fit the loaded image inside the current canvas and center it."""
+        if not self._pixmap or self._pixmap.isNull():
+            self._scale = 1.0
+            self._offset = QtCore.QPointF(0, 0)
+            return
+
+        image_width = self._pixmap.width()
+        image_height = self._pixmap.height()
+        canvas_width = max(1, self.width())
+        canvas_height = max(1, self.height())
+        padding = 16
+
+        available_width = max(1, canvas_width - padding * 2)
+        available_height = max(1, canvas_height - padding * 2)
+        scale_x = available_width / image_width
+        scale_y = available_height / image_height
+
+        self._scale = min(scale_x, scale_y)
+        scaled_width = image_width * self._scale
+        scaled_height = image_height * self._scale
+        self._offset = QtCore.QPointF(
+            (canvas_width - scaled_width) / 2,
+            (canvas_height - scaled_height) / 2,
+        )
         self.update()
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:
@@ -156,6 +186,7 @@ class CanvasWidget(QtWidgets.QWidget):
                 self.update()
         
         elif self._mode == CanvasMode.MARK:
+            self._set_crosshair_cursor()
             if self._dragging and self._current_rect is not None:
                 pos = self._to_image_coords(event.position())
                 self._current_rect.setBottomRight(pos)
@@ -204,12 +235,13 @@ class CanvasWidget(QtWidgets.QWidget):
                     self._boxes.append(new_box)
                     # select the newly created box
                     self._selected_box = new_box
-                    self._current_rect = None
                     # emit signal to indicate boxes changed and switch to select mode
                     self.boxes_changed.emit()
                     # after drawing a box, switch to select mode so user can edit it
                     self.set_mode(CanvasMode.SELECT)
-                    self.update()
+                # always clear the current rect when releasing in MARK mode
+                self._current_rect = None
+                self.update()
             elif self._mode == CanvasMode.SELECT:
                 self._dragging = False
                 self._resizing = False
@@ -304,3 +336,22 @@ class CanvasWidget(QtWidgets.QWidget):
         x = (point.x() - self._offset.x()) / self._scale
         y = (point.y() - self._offset.y()) / self._scale
         return QtCore.QPointF(x, y)
+
+    def _set_crosshair_cursor(self) -> None:
+        """Set a larger custom crosshair cursor for marking mode."""
+        # Create a 48x48 pixel cursor with a + shape
+        pixmap = QtGui.QPixmap(48, 48)
+        pixmap.fill(QtCore.Qt.GlobalColor.transparent)
+        
+        painter = QtGui.QPainter(pixmap)
+        painter.setPen(QtGui.QPen(QtCore.Qt.GlobalColor.black, 2))
+        
+        # Draw horizontal line
+        painter.drawLine(8, 24, 40, 24)
+        # Draw vertical line
+        painter.drawLine(24, 8, 24, 40)
+        
+        painter.end()
+        
+        # Set cursor with hotspot at center (24, 24)
+        self.setCursor(QtGui.QCursor(pixmap, 24, 24))
