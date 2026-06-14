@@ -338,12 +338,30 @@ class EditMode(QtWidgets.QWidget):
         if self.canvas._selected_box in self.canvas._boxes:
             sel_idx = self.canvas._boxes.index(self.canvas._selected_box)
         self.box_list.clear()
+        image_size = self._current_image_size()
         for box in self.canvas._boxes:
-            self.box_list.addItem(f"class {box.class_id}: [{box.x1:.1f},{box.y1:.1f},{box.x2:.1f},{box.y2:.1f}]")
+            if image_size:
+                width, height = image_size
+                x_center = (box.x1 + box.x2) / 2 / width
+                y_center = (box.y1 + box.y2) / 2 / height
+                w_norm = (box.x2 - box.x1) / width
+                h_norm = (box.y2 - box.y1) / height
+                self.box_list.addItem(
+                    f"{box.class_id} {x_center:.6f} {y_center:.6f} {w_norm:.6f} {h_norm:.6f}"
+                )
+            else:
+                self.box_list.addItem(f"{box.class_id} 0.000000 0.000000 0.000000 0.000000")
         if sel_idx >= 0 and sel_idx < self.box_list.count():
             self.box_list.setCurrentRow(sel_idx)
         # mark dirty because list reflects change
         self._mark_dirty()
+
+    def _current_image_size(self) -> tuple[int, int] | None:
+        if 0 <= self.current_index < len(self.images):
+            pixmap = self.canvas._pixmap
+            if pixmap and not pixmap.isNull():
+                return pixmap.width(), pixmap.height()
+        return None
 
     def _change_selected_class(self, value: int) -> None:
         if self.canvas._selected_box:

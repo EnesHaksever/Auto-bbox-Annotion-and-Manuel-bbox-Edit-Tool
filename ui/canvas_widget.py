@@ -118,6 +118,7 @@ class CanvasWidget(QtWidgets.QWidget):
                 pen = QtGui.QPen(QtGui.QColor("red"), 2 / self._scale)
             painter.setPen(pen)
             painter.drawRect(rect)
+            self._draw_box_class_id(painter, box, pen.color())
             
             # draw resize handles if selected
             if box is self._selected_box and self._mode == CanvasMode.SELECT:
@@ -280,6 +281,41 @@ class CanvasWidget(QtWidgets.QWidget):
         self.boxes_changed.emit()
         self.update()
         return True
+
+    def _draw_box_class_id(
+        self,
+        painter: QtGui.QPainter,
+        box: BoundingBox,
+        color: QtGui.QColor,
+    ) -> None:
+        """Draw the class id just outside the bottom-right corner of a box."""
+        painter.save()
+        text = str(box.class_id)
+        font = painter.font()
+        font.setPixelSize(max(1, int(round(11 / self._scale))))
+        painter.setFont(font)
+
+        metrics = QtGui.QFontMetricsF(font)
+        padding_x = 4 / self._scale
+        padding_y = 2 / self._scale
+        gap = 3 / self._scale
+        text_width = metrics.horizontalAdvance(text)
+        text_height = metrics.height()
+        label_rect = QtCore.QRectF(
+            box.x2 + gap,
+            box.y2 + gap,
+            text_width + padding_x * 2,
+            text_height + padding_y * 2,
+        )
+
+        background = QtGui.QColor(color)
+        background.setAlpha(210)
+        painter.setPen(QtCore.Qt.PenStyle.NoPen)
+        painter.setBrush(QtGui.QBrush(background))
+        painter.drawRect(label_rect)
+        painter.setPen(QtGui.QPen(QtGui.QColor("white")))
+        painter.drawText(label_rect, QtCore.Qt.AlignmentFlag.AlignCenter, text)
+        painter.restore()
 
     def _get_handle_at(self, pos: QtCore.QPointF, box: BoundingBox) -> Optional[str]:
         """Check if pos is near a resize handle. Returns handle name or None."""
